@@ -1,0 +1,11 @@
+/bin/
+/dist/
+/bastionxp-ca-data/
+*.key
+*.test
+coverage.out
+/.tools/
+.DS_Store
+# "go build ./cmd/bxp" leaves the binary here; "make build" uses bin/.
+/bxp
+/bxp.exe

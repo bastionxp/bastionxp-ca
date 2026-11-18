@@ -1,0 +1,49 @@
+# Copyright 2026 Ampas Labs Inc.
+# SPDX-License-Identifier: Apache-2.0
+
+# Fuzzes every parser of untrusted input for a while, once a week, and on
+# demand (Actions tab, "Run workflow"). An input that breaks something is
+# kept as an artifact: put it in testdata/fuzz/<target>/ of its package,
+# and it becomes a test that runs with every "go test".
+name: fuzz
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - internal/acme:FuzzACME
+          - internal/server:FuzzOCSP
+          - internal/server:FuzzCSR
+          - internal/server:FuzzRenew
+          - internal/scep:FuzzPKIOperation
+          - internal/scep:FuzzChallenge
+          - internal/token:FuzzVerify
+          - internal/keyfile:FuzzParse
+          - internal/ldap:FuzzUserFilter
+          - internal/ldap:FuzzGroupFilter
+          - internal/policy:FuzzCheckDomain
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Fuzz
+        env:
+          TARGET: ${{ matrix.target }}
+        run: go test -run='^$' -fuzz="^${TARGET#*:}\$" -fuzztime=5m "./${TARGET%%:*}"
+      - name: Keep what failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-failure-${{ strategy.job-index }}
+          path: "**/testdata/fuzz/**"

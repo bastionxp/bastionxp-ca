@@ -1,0 +1,12 @@
+# Renews a certificate from BastionXP CA, run by bastionxp-ca-renew.timer. Edit the
+# paths and the reload command. One copy per certificate, e.g.
+# bastionxp-ca-renew-web.service and bastionxp-ca-renew-web.timer.
+
+[Unit]
+Description=Renew a certificate from BastionXP CA
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/bxp renew --cert /etc/nginx/web.crt --key /etc/nginx/web.key --exec "systemctl reload nginx"

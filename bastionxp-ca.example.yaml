@@ -1,0 +1,163 @@
+# Example BastionXP CA configuration.
+# Copy to bastionxp-ca.yaml and edit, then run: bxp init --config bastionxp-ca.yaml
+
+# Directory where the CA keys and certificates are stored.
+# Keep it private: it holds the CA private keys.
+data_dir: ./bastionxp-ca-data
+
+ca:
+  # Used in the CA certificate names, e.g. "Example Root CA".
+  name: Example
+  # Organization (O) placed in the CA certificates and in every issued certificate.
+  organization: Example Org
+  # Key type for the CA keys: "ecdsa" (P-256, default) or "rsa" (3072 bit).
+  key_type: ecdsa
+  # Lifetimes of the CA certificates: y (365 days) or d. The root's is used
+  # once, at init; the intermediate's at init and at every new-intermediate.
+  # root_validity: 10y           # the default; 1y to 30y
+  # intermediate_validity: 3y    # the default; 1y up to the root's
+  # The only names the CA may ever issue for, written into the
+  # intermediate at init (see "Name constraints" in the BastionXP CA
+  # documentation). A kind not listed (DNS, IP, email) is not allowed at all.
+  # name_constraints:
+  #   dns_domains: [example.com]
+  #   ip_ranges: [10.0.0.0/8]
+  # If the server's keys are encrypted (bxp init --encrypt-keys): a file
+  # with their passphrase. Not inside data_dir. Better: the systemd
+  # credential "bastionxp-ca-key-passphrase", sealed to the TPM. See "Protect
+  # the CA keys" in the BastionXP CA documentation.
+  # key_passphrase_file: /run/secrets/bastionxp-ca-key-passphrase
+
+server:
+  # Where the HTTPS server listens.
+  address: ":8443"
+  # DNS names and IP addresses clients use to reach the server.
+  # They go into the server's own TLS certificate, which the CA issues
+  # to itself at startup.
+  names:
+    - localhost
+    - 127.0.0.1
+  # The address people's browsers use to reach this server. Only needed
+  # for login with the identity provider (see below).
+  # url: https://ca.example.com:8443
+
+  # Revocation. To let other programs find out by themselves whether a
+  # certificate was revoked, give the CA a plain HTTP address for its
+  # public information (its certificates, the list of revoked
+  # certificates, OCSP), and say how others reach it. That address is then
+  # written into every TLS certificate. Nothing that issues certificates
+  # is served there.
+  # public_address: ":8080"
+  # public_url: http://ca.example.com:8080
+
+# Login with your company's identity provider (OIDC): Entra ID, AD FS,
+# Google, Okta, Keycloak and others. Optional. Needs server.url. Register
+# BastionXP CA at the provider with the redirect URI <server.url>/v1/oidc/callback.
+#
+# oidc:
+#   issuer: https://login.microsoftonline.com/<tenant-id>/v2.0
+#   client_id: 00000000-0000-0000-0000-000000000000
+#   client_secret_file: /etc/bastionxp-ca/oidc-client-secret   # or client_secret: <the secret>
+#   username_claim: preferred_username   # the claim that names the person
+#   groups_claim: groups                 # the claim with their groups
+#   # What people get for themselves after a login (bxp tls, bxp ssh):
+#   x509: { cert_profile: tls-client }   # the default; or one of yours based on it
+#   ssh:  { cert_profile: ssh-user }     # the default; or one of yours based on it
+#
+# Login with an Active Directory (or other LDAP) username and password.
+# Optional; for companies without an identity provider. The defaults fit
+# Active Directory. Both logins can be on; they share the access rules.
+#
+# ldap:
+#   url: ldaps://dc1.corp.example.com      # or ldap://... with start_tls: true
+#   ca_file: /etc/bastionxp-ca/corp-root.pem     # issuer of the DCs' certificate
+#   base_dn: DC=corp,DC=example,DC=com
+#   bind_dn: CN=bastionxp-ca-svc,OU=Service Accounts,DC=corp,DC=example,DC=com
+#   bind_password_file: /etc/bastionxp-ca/ldap-password
+#   group_base_dn: OU=Groups,DC=corp,DC=example,DC=com   # only groups below count
+#   # user_filter: (&(objectClass=user)(sAMAccountName={username}))
+#   # username_attribute: userPrincipalName
+#   # group_filter: (&(objectClass=group)(member:1.2.840.113556.1.4.1941:={user_dn}))
+#   # x509: { cert_profile: tls-client }   # as with oidc
+#   # ssh:  { cert_profile: ssh-user }
+#
+# # Who gets what, for people who log in with OIDC or LDAP. {username} is
+# # the person's name in lower case, {short_username} the part of it
+# # before the "@".
+# access:
+#   - groups: [linux-users]
+#     ssh_principals: ["{short_username}"]
+#   # Admins may hand out any certificate. By name here; a group works too
+#   # (groups: [ca-admins]).
+#   - users: [alice@corp.example.com, david@corp.example.com]
+#     admin: true
+
+# ACME server. Optional. ACME is the protocol that certbot, acme.sh, lego,
+# Caddy and others use to get TLS certificates by themselves. A client
+# proves that it controls a host name by answering an HTTP request the CA
+# sends to that host on port 80.
+#
+# List the domains clients may get certificates for. "example.com" allows
+# "example.com" and every name below it, such as "web.example.com".
+#
+# Clients prove a name with http-01 (port 80), tls-alpn-01 (port 443) or
+# dns-01 (a TXT record); wildcards (*.example.com) with dns-01 only.
+# dns_resolver is the DNS server dns-01 asks; default: this machine's.
+#
+# acme:
+#   allowed_domains:
+#     - example.com
+#   allowed_ip_ranges: [10.0.0.0/8]   # IP addresses ACME may issue for; default none
+#   dns_resolver: 10.0.0.53:53
+#   challenges: [http-01, dns-01, tls-alpn-01]   # the default: all three
+#   # Per hour; left out: the default shown; 0: no limit.
+#   limits:
+#     accounts_per_ip_per_hour: 100
+#     orders_per_account_per_hour: 300
+#   x509: { cert_profile: tls-server }   # the default; or one of yours based on it
+
+# SCEP server. Optional. SCEP is the protocol that phones, laptops under
+# device management (MDM), routers and printers use to get a certificate.
+# The "challenge password" a device sends is a one-time token, made with
+# "bxp token".
+#
+# scep:
+#   enabled: true
+#   # A shared challenge for device management systems (Jamf and the like)
+#   # that cannot fetch a token per device. Optional; see "Shared challenge"
+#   # in the BastionXP CA documentation.
+#   static:
+#     challenge_file: /etc/bastionxp-ca/scep-challenge   # at least 16 characters
+#     x509: { cert_profile: tls-device }   # the default (30 days); or tls-client,
+#                                          # tls-server, or one based on them
+#     dns_domains: [devices.example.com]
+#     max_per_hour: 100
+
+# Certificate profiles of your own, beside the built-in tls-server,
+# tls-client, tls-device, ssh-user and ssh-host. Use them by name: bxp token
+# --profile device-client, or as a verifier's cert_profile. See
+# "Certificate profiles" in the BastionXP CA documentation for all settings.
+#
+# profiles:
+#   - name: device-client
+#     base: tls-client          # tls-server, tls-client, email, code-signing, ssh-user or ssh-host
+#     validity: 365d
+#     subject: { organizational_unit: [Devices] }
+#     names: { email: true }
+#   - name: ops-ssh
+#     base: ssh-user
+#     validity: 8h
+#     ssh:
+#       extensions: [permit-pty, permit-agent-forwarding]
+#       critical_options: { source-address: 10.0.0.0/8 }
+
+# Metrics for Prometheus, on an address of their own (not the CA's).
+# Optional. 127.0.0.1 is reachable from this machine only: for Prometheus
+# on another machine, use this machine's internal address (in a container:
+# 0.0.0.0, published to an internal address only), a firewall rule for the
+# Prometheus server, and token_file. With token_file, Prometheus must send
+# "Authorization: Bearer <token>".
+#
+# metrics:
+#   address: 10.0.0.5:9100                 # or 127.0.0.1:9100 for a local Prometheus
+#   token_file: /etc/bastionxp-ca/metrics-token

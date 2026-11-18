@@ -1,0 +1,41 @@
+# Copyright 2026 Ampas Labs Inc.
+# SPDX-License-Identifier: Apache-2.0
+
+# Tests against real servers in Docker, once a week and on request
+# (Actions tab, "Run workflow"): OIDC against Keycloak, LDAP against a
+# Samba Active Directory domain controller, and cert-manager in a
+# Kubernetes cluster (kind). Too slow for every push, but a new release
+# that breaks one shows within a week.
+name: integrations
+on:
+  schedule:
+    - cron: "17 4 * * 1" # Mondays, 04:17 UTC
+  workflow_dispatch:
+
+jobs:
+  keycloak:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: make test-keycloak
+
+  samba:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: make test-samba
+
+  cert-manager:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: make test-cert-manager

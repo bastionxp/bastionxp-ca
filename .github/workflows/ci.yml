@@ -1,0 +1,91 @@
+# Copyright 2026 Ampas Labs Inc.
+# SPDX-License-Identifier: Apache-2.0
+
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Also by hand (Actions tab, "Run workflow"): the jobs that otherwise
+  # wait until the repository is public run then too.
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: make lint
+      - run: make test
+      # The shipped systemd units: syntax, directives, and that what they
+      # start exists.
+      - name: Check the systemd units
+        run: |
+          go build -o bxp ./cmd/bxp
+          sudo install bxp /usr/local/bin/bxp
+          sudo useradd --system --no-create-home bastionxp-ca
+          systemd-analyze verify packaging/systemd/*.service packaging/systemd/*.timer
+
+  # The real bxp binary against openssl, ssh-keygen, sshd, certbot, lego,
+  # acme.sh and scepclient, on Linux, where the CA server is hosted. See
+  # test/e2e/README.md.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      # The clients, at the versions pinned in the Makefile.
+      - uses: actions/cache@v4
+        with:
+          path: .tools
+          key: e2e-tools-${{ runner.os }}-${{ hashFiles('Makefile') }}
+      - name: Prepare the machine
+        run: |
+          # acme.sh answers http-01 with socat; the OpenSSH tests run sshd
+          # as this user, which still wants its privilege separation
+          # directory.
+          sudo apt-get install -y socat openssh-server
+          sudo mkdir -p /run/sshd
+          # ACME clients answer on ports 80 and 443 without root.
+          sudo sysctl -w net.ipv4.ip_unprivileged_port_start=80
+          # The tests use names below e2e.localhost; systemd-resolved
+          # points every *.localhost name here. Stop now if it does not.
+          getent hosts any.e2e.localhost | grep -q '127.0.0.1\|::1' ||
+            { echo "*.localhost does not resolve to this machine"; exit 1; }
+      # In CI a missing tool fails the run instead of skipping its test.
+      - run: BXP_E2E_REQUIRE_ALL=1 make test-e2e
+
+  # Unit tests on macOS and Windows, and a smoke test of the real binary
+  # there: a CA, its server, and the main client commands. While the
+  # repository is private these run only by hand, to save minutes; once it
+  # is public, on every push.
+  other-systems:
+    if: ${{ !github.event.repository.private || github.event_name == 'workflow_dispatch' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test ./...
+      - run: go test -tags e2e -count=1 -v -run TestSmoke ./test/e2e
+
+  # The container image, built and used as the documentation says. See
+  # test/container/smoke.sh.
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: make test-container

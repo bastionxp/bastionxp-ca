@@ -1,0 +1,19 @@
+# Runs bastionxp-ca-renew.service every hour. "bxp renew" only renews when
+# two thirds of the certificate's lifetime have passed, so most runs do
+# nothing. Hourly runs give a 24-hour certificate several tries before
+# it expires.
+#
+#   sudo systemctl enable --now bastionxp-ca-renew.timer
+
+[Unit]
+Description=Renew a certificate from BastionXP CA, hourly
+
+[Timer]
+OnCalendar=hourly
+# Many machines should not ask the CA at the same second.
+RandomizedDelaySec=15m
+# Catch up after the machine was off.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
